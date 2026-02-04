@@ -2,7 +2,9 @@
   "name": "tiny-cms",
   "version": "0.1.0",
   "private": true,
+  "workspaces": ["packages/*"],
   "scripts": {
+    "build:sdk": "npm run build -w tiny-cms-sdk",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
