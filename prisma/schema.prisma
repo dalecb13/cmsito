@@ -50,6 +50,7 @@ model User {
   id            String    @id @default(cuid())
   email         String    @unique
   name          String?
+  passwordHash  String?   @map("password_hash") // credentials (email+password) only; SSO users null
   emailVerified DateTime? @map("email_verified")
   image         String?
   role          Role      @default(CONTRIBUTOR)
