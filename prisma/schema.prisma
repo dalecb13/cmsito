@@ -1,0 +1,169 @@
+// Tiny CMS – Prisma schema
+// Single-tenant: one deployment = one knowledge base.
+// Database: user-supplied PostgreSQL (env DATABASE_URL).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  CONTRIBUTOR
+  MAINTAINER
+  OWNER
+}
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum VersionKind {
+  DRAFT
+  PUBLISHED
+}
+
+enum AuditAction {
+  ARTICLE_CREATED
+  ARTICLE_UPDATED
+  ARTICLE_DELETED
+  ARTICLE_PUBLISHED
+  THEME_UPDATED
+  USER_INVITED
+  USER_ROLE_CHANGED
+  USER_REMOVED
+}
+
+// ---------------------------------------------------------------------------
+// User & auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  role          Role      @default(CONTRIBUTOR)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  articlesCreated   Article[]       @relation("ArticleCreator")
+  articleVersions   ArticleVersion[] @relation("VersionUpdatedBy")
+  auditLogs         AuditLog[]
+  publishApprovals  Article[]       @relation("PublishApprover")
+  invitationsSent   Invitation[]    @relation("InvitationInviter")
+
+  @@map("users")
+}
+
+model Invitation {
+  id        String   @id @default(cuid())
+  email     String
+  role      Role
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  invitedById String? @map("invited_by_id")
+
+  invitedBy User? @relation("InvitationInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@map("invitations")
+}
+
+// ---------------------------------------------------------------------------
+// Content & versioning
+// ---------------------------------------------------------------------------
+
+model Article {
+  id        String        @id @default(cuid())
+  slug      String        @unique
+  title     String
+  status    ArticleStatus @default(DRAFT)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  creatorId String @map("creator_id")
+  creator   User   @relation("ArticleCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+
+  // Publish approval: set by maintainer or owner; required before "Publish" action
+  publishApprovedById String?   @map("publish_approved_by_id")
+  publishApprovedAt   DateTime? @map("publish_approved_at")
+  publishApprovedBy   User?     @relation("PublishApprover", fields: [publishApprovedById], references: [id], onDelete: SetNull)
+
+  versions ArticleVersion[]
+
+  @@map("articles")
+}
+
+/// One row per save/publish event. "Current" draft = latest VersionKind.DRAFT by updatedAt; "current" published = latest VersionKind.PUBLISHED.
+model ArticleVersion {
+  id         String      @id @default(cuid())
+  kind       VersionKind
+  updatedAt  DateTime    @default(now()) @map("updated_at")
+  updatedById String      @map("updated_by_id")
+
+  articleId String @map("article_id")
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  contentId String @unique @map("content_id")
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  updatedBy User @relation("VersionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([articleId, kind, updatedAt(sort: Desc)])
+  @@map("article_versions")
+}
+
+/// TipTap/ProseMirror JSON (see plan §14). One row per snapshot; referenced by ArticleVersion.
+model Content {
+  id        String   @id @default(cuid())
+  body      Json     // Root doc node: { type: "doc", content: [...] }
+  createdAt DateTime @default(now()) @map("created_at")
+
+  articleVersion ArticleVersion?
+
+  @@map("contents")
+}
+
+// ---------------------------------------------------------------------------
+// Theme (one row per KB / deployment; app ensures singleton)
+// ---------------------------------------------------------------------------
+
+model Theme {
+  id        String   @id @default(cuid())
+  preset    String   // e.g. "default", "minimal"
+  overrides Json     // { primaryColor?, fontFamily?, headingFont?, ... }
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("themes")
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id           String     @id @default(cuid())
+  action       AuditAction
+  resourceType String     @map("resource_type") // e.g. "Article", "Theme"
+  resourceId   String?    @map("resource_id")
+  metadata     Json?      // optional extra context
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
+}
