@@ -42,6 +42,9 @@ export default async function EditArticlePage({
         slug={slug}
         initialTitle={article.title}
         initialBody={JSON.parse(JSON.stringify(body))}
+        status={article.status}
+        publishApprovedAt={article.publishApprovedAt?.toISOString() ?? null}
+        userRole={session.user.role}
       />
     </main>
   );

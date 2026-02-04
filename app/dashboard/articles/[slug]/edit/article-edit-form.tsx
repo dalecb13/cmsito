@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Editor } from "@/components/editor";
+import type { Role } from "@prisma/client";
 
 type DocJSON = { type: "doc"; content?: unknown[] };
 
@@ -11,16 +12,55 @@ interface ArticleEditFormProps {
   slug: string;
   initialTitle: string;
   initialBody: DocJSON;
+  status: "DRAFT" | "PUBLISHED";
+  publishApprovedAt: string | null;
+  userRole: Role;
 }
 
-export function ArticleEditForm({ slug, initialTitle, initialBody }: ArticleEditFormProps) {
+export function ArticleEditForm({
+  slug,
+  initialTitle,
+  initialBody,
+  status,
+  publishApprovedAt,
+  userRole,
+}: ArticleEditFormProps) {
   const router = useRouter();
   const [title, setTitle] = useState(initialTitle);
   const [body, setBody] = useState<DocJSON>(initialBody);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [approvalState, setApprovalState] = useState(publishApprovedAt);
+  const canApproveOrPublish = userRole === "MAINTAINER" || userRole === "OWNER";
 
   const handleBodyChange = useCallback((json: DocJSON) => setBody(json), []);
+
+  async function handleApprove() {
+    setError("");
+    setLoading(true);
+    const res = await fetch(`/api/articles/${encodeURIComponent(slug)}/approve`, { method: "POST" });
+    setLoading(false);
+    if (res.ok) {
+      setApprovalState(new Date().toISOString());
+      router.refresh();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Failed to approve");
+    }
+  }
+
+  async function handlePublish() {
+    setError("");
+    setLoading(true);
+    const res = await fetch(`/api/articles/${encodeURIComponent(slug)}/publish`, { method: "POST" });
+    setLoading(false);
+    if (res.ok) {
+      router.refresh();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Failed to publish");
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -56,6 +96,26 @@ export function ArticleEditForm({ slug, initialTitle, initialBody }: ArticleEdit
   return (
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem", maxWidth: 720 }}>
       <p style={{ color: "#666" }}>Slug: /{slug}</p>
+      <p style={{ color: "#666", margin: 0 }}>
+        Status: <strong>{status}</strong>
+        {approvalState && (
+          <> · Approved for publish {new Date(approvalState).toLocaleString()}</>
+        )}
+      </p>
+      {canApproveOrPublish && status === "DRAFT" && (
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          {!approvalState && (
+            <button type="button" onClick={handleApprove} disabled={loading} style={{ padding: "0.5rem 1rem" }}>
+              Approve for publish
+            </button>
+          )}
+          {approvalState && (
+            <button type="button" onClick={handlePublish} disabled={loading} style={{ padding: "0.5rem 1rem" }}>
+              Publish
+            </button>
+          )}
+        </div>
+      )}
       <label>
         Title
         <input

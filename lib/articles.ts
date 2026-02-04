@@ -58,3 +58,37 @@ export async function updateDraft(params: {
     },
   });
 }
+
+/** Get current published version (latest PUBLISHED by updatedAt). */
+export async function getPublishedVersion(articleId: string) {
+  return prisma.articleVersion.findFirst({
+    where: { articleId, kind: VersionKind.PUBLISHED },
+    orderBy: { updatedAt: "desc" },
+    include: { content: true },
+  });
+}
+
+/** Publish article: copy current draft to new Content + ArticleVersion (PUBLISHED), set status. */
+export async function publishArticle(params: {
+  articleId: string;
+  publishedById: string;
+}) {
+  const draft = await getDraftVersion(params.articleId);
+  if (!draft?.content?.body) {
+    throw new Error("No draft content to publish");
+  }
+  const body = draft.content.body as object;
+  const content = await prisma.content.create({ data: { body } });
+  await prisma.articleVersion.create({
+    data: {
+      articleId: params.articleId,
+      kind: VersionKind.PUBLISHED,
+      contentId: content.id,
+      updatedById: params.publishedById,
+    },
+  });
+  await prisma.article.update({
+    where: { id: params.articleId },
+    data: { status: "PUBLISHED" },
+  });
+}
