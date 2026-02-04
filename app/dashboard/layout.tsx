@@ -9,6 +9,7 @@ export default function DashboardLayout({
         <Link href="/dashboard">Dashboard</Link>
         <Link href="/dashboard/articles">Articles</Link>
         <Link href="/dashboard/audit">Audit log</Link>
+        <Link href="/dashboard/theme">Theme</Link>
       </nav>
       {children}
     </div>
