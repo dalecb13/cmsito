@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { createArticle } from "@/lib/articles";
+import { createAuditLog } from "@/lib/audit";
 
 export async function GET() {
   const session = await getSession();
@@ -54,6 +55,13 @@ export async function POST(request: Request) {
     title,
     creatorId: session.user.id,
     body: body.body ?? undefined,
+  });
+  await createAuditLog({
+    userId: session.user.id,
+    action: "ARTICLE_CREATED",
+    resourceType: "Article",
+    resourceId: article.id,
+    metadata: { slug, title },
   });
   return NextResponse.json(article, { status: 201 });
 }

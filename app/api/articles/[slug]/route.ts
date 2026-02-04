@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { canEditArticle } from "@/lib/auth";
 import { getDraftVersion, updateDraft } from "@/lib/articles";
+import { createAuditLog } from "@/lib/audit";
 
 export async function GET(
   _request: Request,
@@ -60,6 +61,16 @@ export async function PATCH(
       updatedById: session.user.id,
     });
   }
+  const updatedAt = typeof body.title === "string" && body.title.trim() ? true : body.body !== undefined;
+  if (updatedAt) {
+    await createAuditLog({
+      userId: session.user.id,
+      action: "ARTICLE_UPDATED",
+      resourceType: "Article",
+      resourceId: article.id,
+      metadata: { slug },
+    });
+  }
   const updated = await prisma.article.findUnique({
     where: { id: article.id },
     include: { creator: { select: { id: true, email: true, name: true } } },
@@ -83,6 +94,13 @@ export async function DELETE(
   if (!canEditArticle(session.user.role, session.user.id, article.creatorId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  await createAuditLog({
+    userId: session.user.id,
+    action: "ARTICLE_DELETED",
+    resourceType: "Article",
+    resourceId: article.id,
+    metadata: { slug, title: article.title },
+  });
   await prisma.article.delete({ where: { id: article.id } });
   return new NextResponse(null, { status: 204 });
 }

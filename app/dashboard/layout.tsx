@@ -8,6 +8,7 @@ export default function DashboardLayout({
       <nav style={{ display: "flex", gap: "1.5rem", marginBottom: "1.5rem", borderBottom: "1px solid #eee", paddingBottom: "0.5rem" }}>
         <Link href="/dashboard">Dashboard</Link>
         <Link href="/dashboard/articles">Articles</Link>
+        <Link href="/dashboard/audit">Audit log</Link>
       </nav>
       {children}
     </div>

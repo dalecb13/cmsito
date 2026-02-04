@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { publishArticle } from "@/lib/articles";
+import { createAuditLog } from "@/lib/audit";
 
 /** Maintainer or owner only. Requires approval. Copies draft → published, sets status PUBLISHED. */
 export async function POST(
@@ -30,6 +31,13 @@ export async function POST(
     await publishArticle({
       articleId: article.id,
       publishedById: session.user.id,
+    });
+    await createAuditLog({
+      userId: session.user.id,
+      action: "ARTICLE_PUBLISHED",
+      resourceType: "Article",
+      resourceId: article.id,
+      metadata: { slug },
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Publish failed";
